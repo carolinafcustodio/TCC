@@ -1,0 +1,593 @@
+#Limpar dados
+rm(list=ls(all=TRUE))
+
+#Pacotes para leitura e tratamento dos dados
+
+#pacote para leitura de dados
+library('data.table')
+
+#pacote para rodar modelo oaxaca
+library('oaxaca')
+
+#pacote para testar multicolinearidade
+library('car')
+
+#pacotes para gráficos
+library('ggridges')
+library('ggplot2')
+library('viridis')
+library('hrbrthemes')
+library('hexbin')
+
+#definição do local
+setwd('C:\\Caravela Biz\\Dados e Scripts\\Rais\\Bases Baixadas')
+
+#leitura dos dados
+rais <- fread("Sul.txt", sep = ';')
+
+#visualizar o nome das colunas
+names(rais)
+
+#selecionando as colunas
+rais <- rais[,c(7,8,22,24,26,32,43,44,47,48)]
+
+#visualizar as primeiras observações
+head(rais)
+
+#fazer um filtro de quem tem vínculo ativo
+rais <- subset(rais,`Vínculo Ativo 31/12` == 1)
+
+#para trocar a virgula por ponto na nova coluna tempo
+rais$tempo <- gsub(",",".",rais$`Tempo Emprego`)
+  
+#para trocar de caracter para numerico
+rais$tempo <- as.numeric(rais$tempo)
+
+#para trocar a virgula por ponto na nova coluna salario
+rais$salario <- gsub("\\.","",rais$`Vl Remun Dezembro Nom`)
+
+rais$salario <- gsub(",",".",rais$salario)
+
+#para trocar de caracter para numerico
+rais$salario <- as.numeric(rais$salario)
+
+#mantendo somente w e horas contr significantes
+rais <- subset(rais,salario > 0)
+
+rais <- subset(rais,`Qtd Hora Contr` > 19)
+
+rais$salhora <- (rais$salario/(rais$`Qtd Hora Contr`*4))
+
+#cria o ln do salhora
+rais$lnw <- log(rais$salario/(rais$`Qtd Hora Contr`)*4)
+
+
+#verificar os valores da coluna escolaridade com o dicionario
+table(rais$`Escolaridade após 2005`)
+
+#criar o supinc
+rais$supinc <- ifelse(rais$`Escolaridade após 2005`==8,1,0)
+
+#verificar os valores da coluna nova supinc
+table(rais$supinc)
+
+#criar o sup
+rais$sup <- ifelse(rais$`Escolaridade após 2005`==9,1,0)
+
+#criar o pos
+rais$pos <- ifelse(rais$`Escolaridade após 2005`>9,1,0)
+
+#criar o idade2
+rais$idade2 <- (rais$Idade^2)
+
+#dummy pra genero
+rais$genero <- (rais$`Sexo Trabalhador`-1)
+
+#geramos as variáveis para os intervalos
+rais$agecat1 <- ifelse(rais$`Idade`<=25,1,0)
+
+rais$agecat2 <- ifelse(rais$`Idade`>25 & rais$`Idade`<= 35,1,0)
+
+rais$agecat3 <- ifelse(rais$`Idade`>35 & rais$`Idade`<= 45,1,0)
+
+rais$agecat4 <- ifelse(rais$`Idade`>45 & rais$`Idade`<= 55,1,0)
+
+rais$agecat5 <- ifelse(rais$`Idade`>55,1,0)
+
+
+#Avaliar o comportamento da variável salário
+
+summary(rais$lnw)
+
+summary(subset(rais, stem == 0)$lnw)
+summary(subset(rais, stem ==1)$lnw)
+
+
+hist(rais$lnw)
+qqnorm(rais$lnw)
+
+
+#Plotando gráficos
+
+#Função densidade do lnw
+rais %>%
+  ggplot(aes(x=lnw)) +
+  geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8)
+
+#Função densidade do lnw por categorias de idade
+
+rais$id <- ifelse(rais$`Idade`<=25,"Até 25 anos",
+                  ifelse(rais$`Idade`>25 & rais$`Idade`<= 35,"De 26 a 35 anos",
+                         ifelse(rais$`Idade`>35 & rais$`Idade`<= 45,"De 36 a 45 anos",
+                                ifelse(rais$`Idade`>45 & rais$`Idade`<= 55,"De 46 a 55 anos",
+                                       ifelse(rais$`Idade`>55,"Mais que 55 anos","NA")))))
+
+
+ggplot(rais, aes(x = lnw, y = id, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Densidade do salário hora em log por categoria de idade') +
+  theme_ipsum() +
+  theme(
+    legend.position="none",
+    panel.spacing = unit(0.1, "lines"),
+    strip.text.x = element_text(size = 8)
+  )
+
+#Função densidade do lnw por grupo STEM e não-STEM
+
+rais$tecnologia <- ifelse(rais$`stem`==1,"STEM","Não-STEM")
+
+ggplot(rais, aes(x = lnw, y = tecnologia, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Densidade do salário hora em log por grupo STEM e Não-STEM') +
+  theme_ipsum() +
+  theme(
+    legend.position="none",
+    panel.spacing = unit(0.1, "lines"),
+    strip.text.x = element_text(size = 8)
+  )
+
+#Função densidade do lnw por gênero
+
+rais$sexo <- ifelse(rais$`genero`==1,"Mulher","Homem")
+
+ggplot(rais, aes(x = lnw, y = sexo, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01, alpha=0.7) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Densidade do salário hora em log por gênero') +
+  theme_ipsum() +
+  theme(
+    legend.position="none",
+    panel.spacing = unit(0.1, "lines"),
+    strip.text.x = element_text(size = 8)
+  )
+
+#Função densidade do lnw por gênero somente para Não-STEM
+
+ggplot(subset(rais,stem==0), aes(x = lnw, y = sexo, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01, alpha=0.7) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Densidade do salário hora em log por gênero') +
+  theme_ipsum() +
+  theme(
+    legend.position="none",
+    panel.spacing = unit(0.1, "lines"),
+    strip.text.x = element_text(size = 8)
+  )
+
+#Função densidade do lnw por gênero somente para STEM
+
+ggplot(subset(rais,stem==1), aes(x = lnw, y = sexo, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01, alpha=0.7) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Densidade do salário hora em log por gênero') +
+  theme_ipsum() +
+  theme(
+    legend.position="none",
+    panel.spacing = unit(0.1, "lines"),
+    strip.text.x = element_text(size = 8)
+  )
+
+#Gráfico de escolaridade e salário por grupo Stem e não stem
+ggplot(raisagecat5, aes(x=lnw, y=`Escolaridade após 2005`, color=tecnologia)) + 
+  geom_point(size=1) +
+  theme_ipsum()
+
+# Gráfico de densidade 2d do lnw com idade
+ggplot(rais, aes(x=lnw, y=Idade) ) +
+  geom_hex(bins = 70) +
+  scale_fill_continuous(type = "viridis") +
+  theme_bw()
+
+# Gráfico de densidade 2d do lnw com tempo
+ggplot(rais, aes(x=lnw, y=tempo) ) +
+  geom_hex(bins = 70) +
+  scale_fill_continuous(type = "viridis") +
+  theme_bw()
+
+#criando síntese para gráfico de bolha STEM e não-STEM
+
+tabela <- data.frame()
+
+sfreq <- table(subset(rais, stem == 1)$id)
+nsfreq <- table(subset(rais, stem == 0)$id)
+slnw <- aggregate(x = subset(rais, stem == 1)$lnw, by = list(subset(rais, stem == 1)$id), FUN = mean)
+nslnw <- aggregate(x = subset(rais, stem == 0)$lnw, by = list(subset(rais, stem == 0)$id), FUN = mean)
+sid <- aggregate(x = subset(rais, stem == 1)$Idade, by = list(subset(rais, stem == 1)$id), FUN = mean)
+nsid <- aggregate(x = subset(rais, stem == 0)$Idade, by = list(subset(rais, stem == 0)$id), FUN = mean)
+
+stabela <- cbind(slnw,sid,sfreq)
+stabela <- stabela[,-c(3,5)]
+names(stabela) <- c('categoria','lnw','idade','freq')
+stabela$Grupo <- 'STEM'
+
+nstabela <- cbind(nslnw,nsid,nsfreq)
+nstabela <- nstabela[,-c(3,5)]
+names(nstabela) <- c('categoria','lnw','idade','freq')
+nstabela$Grupo <- 'Não-STEM'
+
+tabela <- rbind(stabela,nstabela)
+
+rm(sfreq,nsfreq,slnw,nslnw,sid,nsid,stabela,nstabela)
+
+ggplot(tabela, aes(x=lnw, y=idade, size = freq, fill=Grupo)) + 
+  geom_point(alpha=0.7, shape = 21, color="black") + 
+  scale_size(range = c(2,12), name= "Frequência") + 
+  theme_ipsum() +
+  theme(legend.position="bottom") +
+  ylab("Idade") +
+  xlab("Ln do salário-hora") 
+
+
+#criando síntese para gráfico de bolha para gêneros
+
+tabela <- data.frame()
+
+hfreq <- table(subset(rais, genero == 0)$id)
+mfreq <- table(subset(rais, genero == 1)$id)
+hlnw <- aggregate(x = subset(rais, genero == 0)$lnw, by = list(subset(rais, genero == 0)$id), FUN = mean)
+mlnw <- aggregate(x = subset(rais, genero == 1)$lnw, by = list(subset(rais, genero == 1)$id), FUN = mean)
+hid <- aggregate(x = subset(rais, genero == 0)$Idade, by = list(subset(rais, genero == 0)$id), FUN = mean)
+mid <- aggregate(x = subset(rais, genero == 1)$Idade, by = list(subset(rais, genero == 1)$id), FUN = mean)
+
+htabela <- cbind(hlnw,hid,hfreq)
+htabela <- htabela[,-c(3,5)]
+names(htabela) <- c('categoria','lnw','idade','freq')
+htabela$Grupo <- 'Masculino'
+
+mtabela <- cbind(mlnw,mid,mfreq)
+mtabela <- mtabela[,-c(3,5)]
+names(mtabela) <- c('categoria','lnw','idade','freq')
+mtabela$Grupo <- 'Feminino'
+
+tabela <- rbind(mtabela,htabela)
+
+rm(hfreq,mfreq,hlnw,mlnw,hid,mid,htabela,mtabela)
+
+ggplot(tabela, aes(x=lnw, y=idade, size = freq, fill=Grupo)) + 
+  geom_point(alpha=0.7, shape = 21, color="black") + 
+  scale_size(range = c(2,12), name= "Frequência") + 
+  theme_ipsum() +
+  theme(legend.position="bottom") +
+  ylab("Idade") +
+  xlab("Ln do salário-hora") 
+
+
+#criando síntese para gráfico de bolha para gêneros
+
+tabela <- data.frame()
+
+hfreq <- table(subset(rais, genero == 0 & stem == 0)$id)
+mfreq <- table(subset(rais, genero == 1 & stem == 0)$id)
+hlnw <- aggregate(x = subset(rais, genero == 0 & stem == 0)$lnw, by = list(subset(rais, genero == 0 & stem == 0)$id), FUN = mean)
+mlnw <- aggregate(x = subset(rais, genero == 1 & stem == 0)$lnw, by = list(subset(rais, genero == 1 & stem == 0)$id), FUN = mean)
+hid <- aggregate(x = subset(rais, genero == 0 & stem == 0)$Idade, by = list(subset(rais, genero == 0 & stem == 0)$id), FUN = mean)
+mid <- aggregate(x = subset(rais, genero == 1 & stem == 0)$Idade, by = list(subset(rais, genero == 1 & stem == 0)$id), FUN = mean)
+
+htabela <- cbind(hlnw,hid,hfreq)
+htabela <- htabela[,-c(3,5)]
+names(htabela) <- c('categoria','lnw','idade','freq')
+htabela$Grupo <- 'Masculino'
+
+mtabela <- cbind(mlnw,mid,mfreq)
+mtabela <- mtabela[,-c(3,5)]
+names(mtabela) <- c('categoria','lnw','idade','freq')
+mtabela$Grupo <- 'Feminino'
+
+tabela <- rbind(mtabela,htabela)
+
+rm(hfreq,mfreq,hlnw,mlnw,hid,mid,htabela,mtabela)
+
+ggplot(tabela, aes(x=lnw, y=idade, size = freq, fill=Grupo)) + 
+  geom_point(alpha=0.7, shape = 21, color="black") + 
+  scale_size(range = c(2,12), name= "Frequência") + 
+  theme_ipsum() +
+  theme(legend.position="bottom") +
+  ylab("Idade") +
+  xlab("Ln do salário-hora") 
+
+
+
+
+#definir as cbos que são stem
+cbo <- fread('cbo_stem.csv')
+
+#para trocar de int para caracter
+cbo$`CBO 2002` <- as.character(cbo$`CBO 2002`)
+
+#carregar e rodar pacote procv
+library('dplyr')
+
+rais <- left_join(rais,cbo)
+table(rais$stem)
+
+#chamar o nulo (nao stem) de zero
+rais$stem[is.na(rais$stem)] <- 0 
+
+#removendo a base cbo
+rm(cbo)
+
+#oaxaca
+#install.packages('oaxaca')
+
+#carregar o pacote
+library(oaxaca)
+
+
+rais$amostra <- sample(c(0,1),size=nrow(rais),replace=T,prob=c(.9,.1))
+#table(rais$amostra)
+backup <- rais
+#rais <- backup
+
+#rais <- subset(rais, amostra == 1)
+
+#salvar os results do oaxaca
+reg <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = rais)
+
+#Avaliando a relevância estatística dos modelos
+summary(reg$reg$reg.pooled.2)$coefficients["Idade",]
+summary(reg$reg$reg.pooled.2)$coefficients["idade2",]
+summary(reg$reg$reg.pooled.2)$coefficients["tempo",]
+summary(reg$reg$reg.pooled.2)$coefficients["supinc",]
+summary(reg$reg$reg.pooled.2)$coefficients["sup",]
+summary(reg$reg$reg.pooled.2)$coefficients["pos",]
+
+
+raisf <- subset(rais, genero == 1)
+
+#salvar os results do oaxaca para premio stem mulher
+regf <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raisf)
+
+#Avaliando a relevância estatística dos modelos
+summary(regf$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regf$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regf$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regf$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regf$reg$reg.pooled.2)$coefficients["sup",]
+summary(regf$reg$reg.pooled.2)$coefficients["pos",]
+
+
+raism <- subset(rais, genero == 0)
+
+#salvar os results do oaxaca para premio stem homem
+regm <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raism)
+
+#Avaliando a relevância estatística dos modelos
+summary(regm$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regm$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regm$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regm$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regm$reg$reg.pooled.2)$coefficients["sup",]
+summary(regm$reg$reg.pooled.2)$coefficients["pos",]
+
+
+plot(reg)
+
+library("foreign")
+write.dta(rais, "rais.dta")
+
+summary(rais$lnw)
+
+reg
+
+#Plot padrão
+plot(reg)
+
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(reg, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+summary(reg$reg$reg.pooled.2)$coefficients["Idade",]
+
+plot(reg, decomposition = "threefold", group.weight = -1,
+     unexplained.split = TRUE, components = c("endowments", "coefficients"),
+     component.labels = c("endowments" = "Explicado", "coefficients" = "Discriminação"),
+     component.left = TRUE, variables = c("Idade","tempo","sup"),
+     variable.labels = c("Idade" = "Years of Age", "tempo" = "Female", "sup" = "College Education"))
+
+reg$x$x.mean.diff['sup']
+
+reg_genns
+plot(reg_genns)
+
+summary(reg_genns$reg$reg.pooled.2)$coefficients["Idade",]
+summary(reg_genns$reg$reg.pooled.2)$coefficients["idade2",]
+summary(reg_genns$reg$reg.pooled.2)$coefficients["tempo",]
+summary(reg_genns$reg$reg.pooled.2)$coefficients["supinc",]
+summary(reg_genns$reg$reg.pooled.2)$coefficients["sup",]
+summary(reg_genns$reg$reg.pooled.2)$coefficients["pos",]
+
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(reg_genns, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+reg_gens
+plot(reg_gens)
+
+summary(reg_gens$reg$reg.pooled.2)$coefficients["Idade",]
+summary(reg_gens$reg$reg.pooled.2)$coefficients["idade2",]
+summary(reg_gens$reg$reg.pooled.2)$coefficients["tempo",]
+summary(reg_gens$reg$reg.pooled.2)$coefficients["supinc",]
+summary(reg_gens$reg$reg.pooled.2)$coefficients["sup",]
+summary(reg_gens$reg$reg.pooled.2)$coefficients["pos",]
+
+
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(reg_gens, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+
+
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(regf, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+plot(regf, decomposition = "threefold", group.weight = -1,
+     unexplained.split = TRUE, components = c("endowments", "coefficients"),
+     component.left = TRUE, variables = c("Idade","idade2","sup"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade²", "sup" = "Superior"))
+
+
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(regm, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+plot(regm, decomposition = "threefold", group.weight = -1,
+     unexplained.split = TRUE, components = c("endowments", "coefficients"),
+     component.left = TRUE, variables = c("Idade","idade2","sup"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade²", "sup" = "Superior"))
+
+
+regf
+
+
+
+
+#salvar os results do oaxaca por categoria de idade (omitindo cat de base)
+regage <- oaxaca(lnw ~ tempo + supinc + sup + pos + agecat2 + agecat3 + agecat4 + agecat5 | stem | supinc + sup + pos, data = rais)
+
+summary(regage$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regage$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regage$reg$reg.pooled.2)$coefficients["sup",]
+summary(regage$reg$reg.pooled.2)$coefficients["pos",]
+summary(regage$reg$reg.pooled.2)$coefficients["agecat2",]
+summary(regage$reg$reg.pooled.2)$coefficients["agecat3",]
+summary(regage$reg$reg.pooled.2)$coefficients["agecat4",]
+summary(regage$reg$reg.pooled.2)$coefficients["agecat5",]
+
+#salvar os results do oaxaca por categoria de idade 
+raisagecat1 <- subset(rais, agecat1 == 1)
+#raisagecat1$salhora <- (raisagecat1$salario/(raisagecat1$`Qtd Hora Contr`*4))
+regagecat1 <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raisagecat1)
+
+#Avaliando a relevância estatística dos modelos
+summary(regagecat1$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regagecat1$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regagecat1$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regagecat1$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regagecat1$reg$reg.pooled.2)$coefficients["sup",]
+summary(regagecat1$reg$reg.pooled.2)$coefficients["pos",]
+
+raisagecat2 <- subset(rais, agecat2 == 1)
+#raisagecat2$salhora <- (raisagecat2$salario/(raisagecat2$`Qtd Hora Contr`*4))
+regagecat2 <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raisagecat2)
+
+#Avaliando a relevância estatística dos modelos
+summary(regagecat2$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regagecat2$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regagecat2$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regagecat2$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regagecat2$reg$reg.pooled.2)$coefficients["sup",]
+summary(regagecat2$reg$reg.pooled.2)$coefficients["pos",]
+
+raisagecat3 <- subset(rais, agecat3 == 1)
+#raisagecat3$salhora <- (raisagecat3$salario/(raisagecat3$`Qtd Hora Contr`*4))
+regagecat3 <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raisagecat3)
+
+#Avaliando a relevância estatística dos modelos
+summary(regagecat3$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regagecat3$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regagecat3$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regagecat3$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regagecat3$reg$reg.pooled.2)$coefficients["sup",]
+summary(regagecat3$reg$reg.pooled.2)$coefficients["pos",]
+
+raisagecat4 <- subset(rais, agecat4 == 1)
+#raisagecat4$salhora <- (raisagecat4$salario/(raisagecat4$`Qtd Hora Contr`*4))
+regagecat4 <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raisagecat4)
+
+#Avaliando a relevância estatística dos modelos
+summary(regagecat4$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regagecat4$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regagecat4$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regagecat4$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regagecat4$reg$reg.pooled.2)$coefficients["sup",]
+summary(regagecat4$reg$reg.pooled.2)$coefficients["pos",]
+
+raisagecat5 <- subset(rais, agecat5 == 1)
+#raisagecat5$salhora <- (raisagecat5$salario/(raisagecat5$`Qtd Hora Contr`*4))
+regagecat5 <- oaxaca(lnw ~ Idade + idade2 + tempo + supinc + sup + pos | stem | supinc + sup + pos, data = raisagecat5)
+
+#Avaliando a relevância estatística dos modelos
+summary(regagecat5$reg$reg.pooled.2)$coefficients["Idade",]
+summary(regagecat5$reg$reg.pooled.2)$coefficients["idade2",]
+summary(regagecat5$reg$reg.pooled.2)$coefficients["tempo",]
+summary(regagecat5$reg$reg.pooled.2)$coefficients["supinc",]
+summary(regagecat5$reg$reg.pooled.2)$coefficients["sup",]
+summary(regagecat5$reg$reg.pooled.2)$coefficients["pos",]
+
+plot(regage)
+
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(regage, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação",
+                         "agecat2" = "26 a 35 anos", "agecat3" = "36 a 45 anos", "agecat4" = "46 a 55 anos",
+                         "agecat5"= "Acima de 56 anos"))
+
+
+plot (regagecat1)
+#Plot apenas dos endowments e coefficientes, corrigindo os nomes das variáveis
+plot(regagecat1, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação",
+                         "agecat2" = "26 a 35 anos", "agecat3" = "36 a 45 anos", "agecat4" = "46 a 55 anos",
+                         "agecat5"= "Acima de 56 anos"))
+
+
+plot(regagecat1, decomposition = "threefold", group.weight = -1,
+     unexplained.split = TRUE, components = c("endowments", "coefficients"),
+     component.left = TRUE, variables = c("Idade","idade2"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade²"))
+
+plot (regagecat2)
+
+plot(regagecat2, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+
+
+plot (regagecat3)
+plot(regagecat3, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+
+
+plot (regagecat4)
+plot(regagecat4, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
+
+plot (regagecat5)
+plot(regagecat5, components = c("endowments","coefficients"),
+     variable.labels = c("Idade" = "Idade", "idade2" = "Idade ²", "tempo" = "Experiência",
+                         "supinc" = "Superior incompleto", "sup" = "Superior", "pos" = "Pós-graduação"))
